@@ -1,0 +1,81 @@
+import Foundation
+import Observation
+import SwiftUI
+import DoodleCore
+
+@Observable
+@MainActor
+final class BoardManager {
+    var items: [DoodleItem] = []
+    var waitingCount: Int = 0
+
+    var onCompactHover: ((Bool) -> Void)?
+    var onExpandedHover: ((Bool) -> Void)?
+
+    /// Full reload (used on launch + on expand)
+    func reload() {
+        do {
+            let all = try BoardStore.loadFiltered(includeDone: false)
+            self.items = all
+            self.waitingCount = all.filter { $0.status == "waiting_on_user" }.count
+        } catch {
+            emit("Reload failed: \(error)")
+            self.items = []
+            self.waitingCount = 0
+        }
+    }
+
+    /// Lightweight reload just for badge count (timer)
+    func reloadForBadge() {
+        do {
+            let all = try BoardStore.loadFiltered(includeDone: false)
+            self.waitingCount = all.filter { $0.status == "waiting_on_user" }.count
+        } catch {
+            // silent for timer path
+        }
+    }
+
+    /// Full items grouped for the expanded view (called on appear/refresh)
+    func loadForDisplay() -> [DoodleItem] {
+        do {
+            return try BoardStore.loadFiltered(includeDone: false)
+        } catch {
+            emit("Display load failed: \(error)")
+            return []
+        }
+    }
+
+    private func emit(_ message: String) {
+        FileHandle.standardError.write(Data("[BoardManager] \(message)\n".utf8))
+    }
+}
+
+// Group helper for UI
+extension BoardManager {
+    struct StatusGroup: Identifiable {
+        let id = UUID()
+        let title: String
+        let statusKey: String
+        let items: [DoodleItem]
+    }
+
+    func groupedItems(_ raw: [DoodleItem]) -> [StatusGroup] {
+        let filtered = raw.filter { $0.status != "done" }
+        let grouped = Dictionary(grouping: filtered, by: { $0.status })
+
+        var result: [StatusGroup] = []
+
+        func make(_ key: String, title: String) {
+            if let arr = grouped[key], !arr.isEmpty {
+                result.append(StatusGroup(title: title, statusKey: key, items: arr.sorted { $0.updated_at > $1.updated_at }))
+            }
+        }
+
+        // Order per plan: Waiting on You → Active → Blocked
+        make("waiting_on_user", title: "Waiting on You")
+        make("active", title: "Active")
+        make("blocked", title: "Blocked")
+
+        return result
+    }
+}

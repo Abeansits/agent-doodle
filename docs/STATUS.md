@@ -1,0 +1,231 @@
+# agent-doodle — Status & Implementation
+
+**Date:** 2026-07-02  
+**Based on:** `plan-opencode.md` (parallel plan by opencode)
+
+---
+
+## Overview
+
+`agent-doodle` is a lightweight external "state radiator" for conductor + multi-agent workflows.
+
+- Agents post structured status via a tiny CLI (`doodle set`).
+- Humans get a living dashboard in the MacBook notch (badge + hover) or via `doodle board --pretty`.
+- It is **not** an AI — it's a shared, lock-safe scratchpad (`~/.agent-doodle/board.json` or `$DOODLE_BOARD_PATH`).
+
+The goal is to stop asking "what's cooking?" and let agents communicate clearly (especially "what I need from you").
+
+---
+
+## Key Decisions from the Plan
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| 1 | Locking in MVP | `flock(LOCK_EX)` around read-modify-write. Multiple agents will write on day 1. |
+| 2 | Single `set` command | Collapsed from 4 nouns. `type` + `status` handle the rest. |
+| 3 | Badge = `waiting_on_user` only | One clear rule. |
+| 4 | Source from env | `DOODLE_SOURCE` (fallback `AGENT_NAME`). Survives compaction. |
+| 5 | `DOODLE_BOARD_PATH` day one | Testable + overridable. |
+| 6 | Poll, don't watch | 5s `Timer` (simple, matches Arthur pattern). |
+| 7 | Build CLI + UI together | After locking the data model. |
+| 8 | Section order | **Waiting on You → Active → Blocked** |
+
+Name normalization (trim + lower for key, keep `display_name`) and read-side discipline were also locked in.
+
+---
+
+## Data Model
+
+```json
+{
+  "version": 1,
+  "items": [
+    {
+      "name": "auth middleware",
+      "display_name": "Auth Middleware",
+      "type": "session",
+      "status": "waiting_on_user",
+      "summary": "Rate limiting in progress.",
+      "detail": "Decision: token bucket vs fixed window. Any existing patterns to follow?",
+      "source": "conductor",
+      "updated_at": "2026-06-30T14:22:01Z"
+    }
+  ]
+}
+```
+
+**Fields:**
+- `name`: normalized key (stable)
+- `display_name`: last casing written
+- `type`: free string (session/question/blocker/note/...)
+- `status`: `active` | `waiting_on_user` | `blocked` | `done`
+- `summary`: one line
+- `detail`: the human-readable ask (optional but powerful)
+- `source`, `updated_at`
+
+`done` items are excluded from default `doodle board` reads.
+
+---
+
+## Architecture
+
+```
+agent-doodle/
+├── README.md
+├── AGENTS.md
+├── Package.swift
+├── Sources/
+│   ├── DoodleCore/       # Pure Foundation (models + flock + store)
+│   ├── DoodleCLI/        # `doodle` executable
+│   └── DoodleNotchApp/   # Mac notch UI
+├── board.example.json
+└── docs/
+```
+
+**Portability rule:** `DoodleCore` and `DoodleCLI` import **nothing** Mac-specific.
+
+---
+
+## Implementation (Completed)
+
+All MVP scope from the plan is implemented (as of 2026-07-02).
+
+### What Was Built
+
+- **DoodleCore**
+  - `DoodleItem` + `Board` models + `Identifiable`
+  - Name normalization (`trim` + `lowercased`)
+  - `BoardStore` with real `flock(LOCK_EX)` + atomic writes
+  - Path resolution (`DOODLE_BOARD_PATH` or `~/.agent-doodle/board.json`)
+  - Date helpers, relative time, `isStale()`, `prettyPrint()`
+  - High-level `set` (partial updates), `get`, `remove`
+
+- **DoodleCLI**
+  - Full commands: `set`, `board [--status] [--all] [--pretty]`, `get`, `rm`
+  - JSON by default (agent-friendly)
+  - Human `--pretty` output with sections
+  - TIP footer on stderr on every `board` read (re-seeds house style)
+  - Env var support documented
+
+- **DoodleNotchApp**
+  - `AppDelegate` with DynamicNotchKit setup (hover behavior, debounce)
+  - `BoardManager` (`@Observable @MainActor`)
+  - 5-second poll for badge count
+  - Compact icon + red badge (only for `waiting_on_user`)
+  - Expanded view: Waiting on You / Active / Blocked sections
+  - Item cards with summary, detail (truncated), source, relative time
+  - Age dimming (opacity + styling for >6h old items)
+  - Full reload on expand + manual refresh
+
+- **Documentation**
+  - `README.md`
+  - `AGENTS.md` (strong emphasis on **read discipline** + stable names + `--detail`)
+  - `board.example.json`
+
+### Build & Structure
+
+- SwiftPM with 3 targets:
+  - `DoodleCore` (library)
+  - `doodle` (CLI executable)
+  - `DoodleNotchApp` (UI executable)
+- Depends on local `../DynamicNotchKit` (same branch as Arthur)
+- Clean build: `swift build`
+
+---
+
+## Verification (Plan Checklist)
+
+All items completed and passing:
+
+1. Build + manual `set` / `board` — ✅
+2. **Concurrency test**: 5 parallel `doodle set` in loop — ✅ (0 updates lost, thanks to flock)
+3. Name normalization test — ✅ (`"Auth Middleware"` + `"auth middleware"` = single item)
+4. `done` exclusion + `--all` — ✅
+5. Notch build + badge logic — ✅
+6. Age-dimming (backdated 7h item) — ✅ (shows "7h ago", dims in UI)
+7. Full loop + restart survival — ✅ (file-backed state)
+8. Human-readable `--pretty` — ✅
+9. Portability boundary — ✅ (Core/CLI have zero AppKit/SwiftUI)
+
+---
+
+## How to Use
+
+### CLI
+
+```bash
+# Post status (from any agent)
+DOODLE_SOURCE=conductor swift run doodle set "Auth middleware" \
+  --type session \
+  --status waiting_on_user \
+  --summary "Rate limiting in progress." \
+  --detail "Decision: token bucket vs fixed window?"
+
+# Read (agents should do this on status questions)
+swift run doodle board                 # JSON (default)
+swift run doodle board --pretty        # Human readable
+swift run doodle board --status waiting_on_user
+swift run doodle get "auth middleware"
+swift run doodle rm "old task"
+```
+
+### Notch UI
+
+```bash
+swift run DoodleNotchApp
+```
+
+- Lives in the notch.
+- Badge shows count of `waiting_on_user` items.
+- Hover to expand full dashboard.
+- Polls every ~5 seconds.
+
+---
+
+## House Style (AGENTS.md Highlights)
+
+Key rules agents should follow:
+
+- On any status/progress question: **first run `doodle board` (or `get`) and answer from it**. Do not re-derive from chat history.
+- Use stable names.
+- Put the real human ask in `--detail`.
+- Prefer updating by name over creating duplicates.
+- Set proper status (`waiting_on_user` drives the badge).
+
+The `doodle board` command prints a footer tip on stderr to re-seed the style after compaction.
+
+---
+
+## Out of MVP (Future)
+
+- Multiple named boards / project scoping
+- Done archive / history
+- In-notch editing (mark done, etc.)
+- MCP server wrapper
+- Mermaid diagrams, export
+
+---
+
+## Current State
+
+- Fully functional MVP.
+- Core is rock-solid (locking + normalization tested under concurrency).
+- Ready for real conductor sessions.
+- State survives restarts and lives in a single JSON file.
+
+**Suggested next action:** Run a full loop with an actual multi-agent conductor session and observe the notch + board reads in practice.
+
+---
+
+## Files
+
+- `plan-opencode.md` — original plan
+- `README.md`
+- `AGENTS.md`
+- `Sources/DoodleCore/`, `DoodleCLI/`, `DoodleNotchApp/`
+
+Generated from live implementation work (using sub-agents for verification).
+
+---
+
+*Document created 2026-07-02. Markdown is the source of truth for this project.*

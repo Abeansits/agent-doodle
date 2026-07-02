@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "name": "auth middleware",
+      "display_name": "Auth Middleware",
+      "type": "session",
+      "status": "waiting_on_user",
+      "summary": "Rate limiting in progress.",
+      "detail": "Decision: token bucket vs fixed window. Any existing patterns to follow?",
+      "source": "conductor",
+      "updated_at": "2026-06-30T14:22:01Z"
+    },
+    {
+      "name": "jwt vs sessions",
+      "display_name": "JWT vs Sessions",
+      "type": "question",
+      "status": "active",
+      "summary": "Mobile clients need stateless auth.",
+      "detail": null,
+      "source": "auth-agent",
+      "updated_at": "2026-06-30T14:20:15Z"
+    }
+  ]
+}

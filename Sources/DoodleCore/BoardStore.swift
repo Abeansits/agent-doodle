@@ -64,14 +64,30 @@ public enum BoardStore {
 
         // Read current (or default) from the data file (under sidecar lock)
         var board: Board
-        do {
-            if let data = try? Data(contentsOf: url), !data.isEmpty {
-                board = try JSONDecoder().decode(Board.self, from: data)
-            } else {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: url.path) {
+            do {
+                let data = try Data(contentsOf: url)
+                if !data.isEmpty {
+                    board = try JSONDecoder().decode(Board.self, from: data)
+                } else {
+                    board = Board()
+                }
+            } catch {
+                // Corrupt board: rename to preserve evidence, warn on stderr, start fresh.
+                // Do this under the lock to avoid races on the corrupt file itself.
+                let ts = DoodleDate.nowISO().replacingOccurrences(of: ":", with: "-")
+                let corruptName = url.lastPathComponent + ".corrupt-" + ts
+                let corruptURL = url.deletingLastPathComponent().appendingPathComponent(corruptName)
+                do {
+                    try fileManager.moveItem(at: url, to: corruptURL)
+                    fputs("WARNING: corrupt board at \(url.path) backed up to \(corruptName); starting with fresh board.\n", stderr)
+                } catch {
+                    fputs("WARNING: corrupt board at \(url.path) (failed to backup: \(error)); starting fresh.\n", stderr)
+                }
                 board = Board()
             }
-        } catch {
-            // Corrupt? Start fresh but don't lose the lock semantics
+        } else {
             board = Board()
         }
 

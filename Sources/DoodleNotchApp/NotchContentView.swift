@@ -7,6 +7,7 @@ struct NotchContentView: View {
     @State private var displayItems: [DoodleItem] = []
     @State private var showDebug = false
     @State private var optionMonitor: Any?
+    @State private var quitHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -48,6 +49,22 @@ struct NotchContentView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.red)
             }
+            // Subtle quit affordance in corner of expanded view. Muted until hovered.
+            Menu {
+                Button("Quit Agent Doodle") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .keyboardShortcut("q", modifiers: .command)
+                // TODO: Launch at Login, other preferences. Menu can grow.
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .opacity(quitHovered ? 0.8 : 0.15)
+            }
+            .buttonStyle(.plain)
+            .onHover { quitHovered = $0 }
+            .padding(.leading, 2)
         }
     }
 

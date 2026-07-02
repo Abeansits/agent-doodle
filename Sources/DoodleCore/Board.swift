@@ -88,6 +88,11 @@ public enum BoardPath {
         let dir = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     }
+
+    /// Stable sidecar for locking. Never renamed or deleted; data file may be atomically replaced.
+    public static var resolvedLockURL: URL {
+        URL(fileURLWithPath: resolved + ".lock")
+    }
 }
 
 // MARK: - Date helpers

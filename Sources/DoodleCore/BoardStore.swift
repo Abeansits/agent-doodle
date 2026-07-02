@@ -38,28 +38,31 @@ public enum BoardStore {
         }
     }
 
-    /// Perform a read-modify-write under exclusive flock.
+    /// Perform a read-modify-write under exclusive flock on a *stable* sidecar lock file.
+    /// The data file may be atomically replaced (rename) without dropping the lock.
     /// Use for any mutation (set, rm).
     public static func withLock<T>(_ body: (inout Board) throws -> T) throws -> T {
         let url = BoardPath.resolvedURL
+        let lockURL = BoardPath.resolvedLockURL
         try BoardPath.ensureParentDirectory()
 
-        // Open (or create) the file for locking + read/write
-        let path = url.path
-        let fd = open(path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
-        guard fd >= 0 else {
-            throw BoardStoreError.lockFailed("Failed to open board file for locking: \(String(cString: strerror(errno)))")
+        // Open (or create) the *sidecar lock file* — it is NEVER renamed or deleted.
+        // All writers flock this stable inode; data file can be .atomic-replaced safely.
+        let lockPath = lockURL.path
+        let lockFd = open(lockPath, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
+        guard lockFd >= 0 else {
+            throw BoardStoreError.lockFailed("Failed to open lock file for locking: \(String(cString: strerror(errno)))")
         }
-        defer { close(fd) }
+        defer { close(lockFd) }
 
-        // Acquire exclusive lock (blocks until available)
-        let lockResult = flock(fd, LOCK_EX)
+        // Acquire exclusive lock (blocks until available) on the sidecar
+        let lockResult = flock(lockFd, LOCK_EX)
         guard lockResult == 0 else {
-            throw BoardStoreError.lockFailed("flock(LOCK_EX) failed: \(String(cString: strerror(errno)))")
+            throw BoardStoreError.lockFailed("flock(LOCK_EX) failed on sidecar: \(String(cString: strerror(errno)))")
         }
-        defer { flock(fd, LOCK_UN) }
+        defer { flock(lockFd, LOCK_UN) }
 
-        // Read current (or default)
+        // Read current (or default) from the data file (under sidecar lock)
         var board: Board
         do {
             if let data = try? Data(contentsOf: url), !data.isEmpty {
@@ -75,7 +78,7 @@ public enum BoardStore {
         // Mutate
         let result = try body(&board)
 
-        // Write back atomically under lock
+        // Write back atomically under lock (rename temp over data; lock remains on sidecar)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(board)

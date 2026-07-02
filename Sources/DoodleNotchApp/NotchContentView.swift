@@ -50,11 +50,11 @@ struct NotchContentView: View {
                     .foregroundStyle(.red)
             }
             // Subtle quit affordance in corner of expanded view. Muted until hovered.
+            // Cmd+Q is handled at AppDelegate level (real NSEvent monitor); Menu shortcut does not work reliably here.
             Menu {
                 Button("Quit Agent Doodle") {
                     NSApplication.shared.terminate(nil)
                 }
-                .keyboardShortcut("q", modifiers: .command)
                 // TODO: Launch at Login, other preferences. Menu can grow.
             } label: {
                 Image(systemName: "gearshape")
@@ -125,6 +125,8 @@ struct NotchContentView: View {
 
     private func setupOptionMonitor() {
         removeOptionMonitor() // safety
+        // Seed initial state in case Option is already held when view appears.
+        showDebug = NSEvent.modifierFlags.contains(.option)
         optionMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
             self.showDebug = event.modifierFlags.contains(.option)
             return event
@@ -171,6 +173,8 @@ private struct ItemCard: View {
                 Text("\(item.source) · \(DoodleDate.relative(from: item.updated_at))")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
 
             // Line 2: single body line (detail preferred for waiting_on_user, summary otherwise)

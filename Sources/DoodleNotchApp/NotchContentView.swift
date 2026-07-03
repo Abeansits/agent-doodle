@@ -284,36 +284,7 @@ private extension String {
     var nonEmpty: String? { isEmpty ? nil : self }
 }
 
-// Helper for E: clickable links (AttributedString + custom open via NSWorkspace)
-// Supports bare domains (e.g. github.com/foo) by prefixing https, and full URLs.
+// Delegate to the correctly implemented version in DoodleCore (fixes UTF-16 vs character offset bug for non-ASCII).
 private func attributedStringWithLinks(from text: String) -> AttributedString {
-    var result = AttributedString(text)
-
-    // Full URLs
-    if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
-        let nsRange = NSRange(location: 0, length: text.utf16.count)
-        for match in detector.matches(in: text, options: [], range: nsRange) {
-            if let url = match.url {
-                let start = result.index(result.startIndex, offsetByCharacters: match.range.location)
-                let end = result.index(start, offsetByCharacters: match.range.length)
-                result[start..<end].link = url
-            }
-        }
-    }
-
-    // Bare domains (github.com/foo)
-    if let bare = try? NSRegularExpression(pattern: #"\b([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(/[a-zA-Z0-9./_-]*)?)\b"#, options: []) {
-        let nsText = text as NSString
-        let matches = bare.matches(in: text, options: [], range: NSRange(location: 0, length: nsText.length))
-        for match in matches.reversed() {
-            let domain = nsText.substring(with: match.range)
-            if !domain.lowercased().hasPrefix("http"),
-               let url = URL(string: "https://" + domain) {
-                let start = result.index(result.startIndex, offsetByCharacters: match.range.location)
-                let end = result.index(start, offsetByCharacters: match.range.length)
-                result[start..<end].link = url
-            }
-        }
-    }
-    return result
+    DoodleCore.attributedStringWithLinks(from: text)
 }

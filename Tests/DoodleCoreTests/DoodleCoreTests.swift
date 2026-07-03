@@ -81,4 +81,18 @@ final class DoodleCoreTests: XCTestCase {
         let newData = try Data(contentsOf: url)
         XCTAssertFalse(newData.isEmpty)
     }
+
+    func testAttributedStringWithLinks_nonASCII() {
+        // Emoji/glyphs (non-ASCII) before URLs must not throw off UTF-16 vs character offsets.
+        let input = "❓ check github.com/foo/bar 🔨 https://example.com"
+        let attr = DoodleCore.attributedStringWithLinks(from: input)
+
+        let links = attr.runs.compactMap { run -> String? in
+            if run.link != nil {
+                return String(attr[run.range].characters)
+            }
+            return nil
+        }
+        XCTAssertEqual(links, ["github.com/foo/bar", "https://example.com"])
+    }
 }

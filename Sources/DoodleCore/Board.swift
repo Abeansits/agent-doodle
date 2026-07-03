@@ -137,3 +137,44 @@ public enum DoodleDate {
         return age > (thresholdHours * 3600)
     }
 }
+
+// MARK: - Link helper (for UI attributed strings with tappable links)
+// Correctly bridges UTF-16 NSRange (from NSDataDetector/NSRegularExpression) to AttributedString
+// character offsets using String.Index conversion. Handles non-ASCII (glyphs, emoji).
+public func attributedStringWithLinks(from text: String) -> AttributedString {
+    var result = AttributedString(text)
+
+    // Full URLs via NSDataDetector (UTF-16 NSRange -> String.Index -> Attributed char offset)
+    if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
+        let nsRange = NSRange(location: 0, length: text.utf16.count)
+        for match in detector.matches(in: text, options: [], range: nsRange) {
+            if let url = match.url,
+               let stringRange = Range(match.range, in: text) {
+                let lowerOffset = text.distance(from: text.startIndex, to: stringRange.lowerBound)
+                let charCount = text.distance(from: stringRange.lowerBound, to: stringRange.upperBound)
+                let start = result.index(result.startIndex, offsetByCharacters: lowerOffset)
+                let end = result.index(start, offsetByCharacters: charCount)
+                result[start..<end].link = url
+            }
+        }
+    }
+
+    // Bare domains e.g. github.com/foo/bar (no scheme) - same correct conversion
+    if let bare = try? NSRegularExpression(pattern: #"\b([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(/[a-zA-Z0-9./_-]*)?)\b"#, options: []) {
+        let nsText = text as NSString
+        let matches = bare.matches(in: text, options: [], range: NSRange(location: 0, length: nsText.length))
+        for match in matches.reversed() {
+            let domain = nsText.substring(with: match.range)
+            if !domain.lowercased().hasPrefix("http"),
+               let url = URL(string: "https://" + domain),
+               let stringRange = Range(match.range, in: text) {
+                let lowerOffset = text.distance(from: text.startIndex, to: stringRange.lowerBound)
+                let charCount = text.distance(from: stringRange.lowerBound, to: stringRange.upperBound)
+                let start = result.index(result.startIndex, offsetByCharacters: lowerOffset)
+                let end = result.index(start, offsetByCharacters: charCount)
+                result[start..<end].link = url
+            }
+        }
+    }
+    return result
+}

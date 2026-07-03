@@ -85,6 +85,10 @@ public enum BoardPath {
         let fm = FileManager.default
         if !fm.fileExists(atPath: path) && fm.fileExists(atPath: oldPath) {
             do {
+                try fm.createDirectory(
+                    atPath: (path as NSString).deletingLastPathComponent,
+                    withIntermediateDirectories: true
+                )
                 try fm.copyItem(atPath: oldPath, toPath: path)
                 fputs("[agent-radar] Migrated board from ~/.agent-doodle/board.json (left as backup).\n", stderr)
             } catch {

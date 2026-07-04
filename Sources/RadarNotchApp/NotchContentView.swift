@@ -160,13 +160,16 @@ private struct ItemCard: View {
 
     @State private var isExpanded: Bool
     @State private var isHovered = false
+    @State private var hasUserToggled: Bool
 
     init(item: RadarItem, boardManager: BoardManager, showDebug: Bool = false) {
         self.item = item
         self.boardManager = boardManager
         self.showDebug = showDebug
         let trimmedDetail = item.detail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        _isExpanded = State(initialValue: item.status == "waiting_on_user" && !trimmedDetail.isEmpty)
+        let defaultExpand = item.status == "waiting_on_user" && !trimmedDetail.isEmpty
+        _isExpanded = State(initialValue: defaultExpand)
+        _hasUserToggled = State(initialValue: false)
     }
 
     var body: some View {
@@ -221,6 +224,7 @@ private struct ItemCard: View {
             .onTapGesture {
                 if hasDetail {
                     isExpanded.toggle()
+                    hasUserToggled = true
                 }
                 // else: no detail → no chevron → row click is a no-op (no empty expansion)
             }
@@ -271,10 +275,31 @@ private struct ItemCard: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .onChange(of: item.status) { _, _ in
+            syncDefaultExpansion()
+        }
+        .onChange(of: item.detail) { _, _ in
+            syncDefaultExpansion()
+        }
     }
 
     private var hasDetail: Bool {
         item.detail?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty != nil
+    }
+
+    /// Keep isExpanded in sync when the underlying item is refreshed (same id reused across board polls).
+    /// Respects explicit user toggles; adopts the waiting+detail default only when the user has not toggled.
+    private func syncDefaultExpansion() {
+        let has = hasDetail
+        if !has {
+            isExpanded = false
+            hasUserToggled = false
+            return
+        }
+        if !hasUserToggled {
+            isExpanded = (item.status == "waiting_on_user")
+        }
+        // If user has toggled, preserve their choice across refreshes.
     }
 
     private func glyphFor(type: String) -> String? {

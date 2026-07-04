@@ -232,10 +232,15 @@ private struct ItemCard: View {
                         Image(systemName: "checkmark")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
+                            .padding(5)
+                            .background(
+                                Circle().fill(Color.secondary.opacity(0.06))
+                            )
                     }
                     .buttonStyle(.plain)
                     .help("Mark done")
-                    .padding(.trailing, 2)
+                    // Larger explicit padding for clearly-bounded isolated hit target
+                    .padding(.trailing, 4)
                 }
             }
 

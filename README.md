@@ -115,6 +115,6 @@ Read `AGENTS.md`. The most important parts:
 - AGENTS.md + read discipline
 - Survives restart
 
-Fast follows tracked in the plan.
+Fast follows tracked in issues.
 
 MIT — see LICENSE.

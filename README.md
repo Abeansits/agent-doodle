@@ -30,8 +30,9 @@ swift build -c release
 mkdir -p ~/.local/bin
 install -m 755 .build/release/radar ~/.local/bin/radar
 
-# Make sure ~/.local/bin is on your PATH (e.g. add to ~/.zprofile)
+# Make sure ~/.local/bin is on your PATH (add to ~/.zprofile or ~/.zshrc if needed)
 export PATH="$HOME/.local/bin:$PATH"
+# (restart your shell or `source` the profile)
 
 radar --help
 ```
@@ -44,9 +45,9 @@ swift build -c release
 .build/release/RadarNotchApp
 ```
 
-The app is an accessory (no Dock icon). It appears in the notch. Hover to expand the board. Use the gear (top-right, hover to reveal) → Quit, or press ⌘Q.
+The app is an accessory (no Dock icon). It lives in the notch and expands on hover. Use the gear (top-right, hover-revealed) → Quit or press ⌘Q.
 
-For auto-start at login, create a simple LaunchAgent plist that launches the `RadarNotchApp` binary (or wait for the built-in option in the menu).
+For auto-start at login, wire up a LaunchAgent plist pointing at the release binary (or the in-app option once implemented).
 
 ## Commands
 
